@@ -1,6 +1,6 @@
 function userManagementGTM() {
-  var daneEmail = "dane_nagy@g.harvard.edu";
-  var serviceEmail = "analytics-provisioning@hwp-analytics-automation-d6e0.iam.gserviceaccount.com";
+  var daneEmail = "dane_nagy@example.com";
+  var serviceEmail = "example@google.com";
 
 var accountsGTM = TagManager.Accounts.list({
     fields:'account(accountId,name,path)'
