@@ -1,0 +1,414 @@
+// var everythingSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('2-9-2024');
+var enduserEventsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Custom Events - End Users');
+var internaluserEventsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Custom Events -Internal Users - Platform Tracking');
+var variablesSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(' Custom Variables');
+// var customVariablesSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(' Custom Variables');
+
+// var tagsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Tags');
+var eventNames = enduserEventsSheet.getRange(5,1,1,44);
+// var eventNames = internaluserEventsSheet.getRange(5,1,10,41);
+
+var variableList = variablesSheet.getRange(5,1,41,8);
+
+var triggers= [];
+// var accountTriggerPath =  'accounts/--------------/containers/--------------/workspaces/4';
+var accountTriggerPath =  'accounts/--------------/containers/--------------/workspaces/4';
+var ga4VarId = "3";
+var updateSig = "Updates: \n -2024-3-12-[FFW]GA4 DN"
+
+
+
+
+function listVariables(path){
+  return TagManager.Accounts.Containers.Workspaces.Variables.list(
+    path,
+    {fields: 'variable(name,variableId,fingerprint)'}
+  ).variable;
+
+}
+
+function listTags (path){
+  return TagManager.Accounts.Containers.Workspaces.Tags.list(
+    path,
+    {fields: 'tag(tagId,name,fingerprint,firingTriggerId)'}
+  ).tag;
+}
+
+function listTriggers (path){
+  return TagManager.Accounts.Containers.Workspaces.Triggers.list(
+    path,
+      {fields: 'trigger(path,name,containerId,triggerId)'}
+  ).trigger;
+}
+
+function ga4CustomTriggerCreation() {
+
+    var triggerList = TagManager.Accounts.Containers.Workspaces.Triggers.list(
+      accountTriggerPath,
+      {fields: 'trigger(path,name,containerId,triggerId)'}
+    ).trigger;
+  
+    // Logger.log(typeof triggerList)
+    eventNames.getValues().forEach(function(event){
+      function isTrigger(triggerName){
+       return triggerName.name.includes(event[0])
+      }
+      var triggerFound = '';
+      if(triggerList){
+        Logger.log("triggers found")
+      triggerFound = triggerList.find(isTrigger);
+      }
+     
+      Utilities.sleep(5000);
+    
+      var eventNameString = event[0].toString();
+      var eventType = event[2].toString();
+      // Logger.log("Event Type: "+ eventType)
+      var gtmEventName = "Trigger cEvent - "+ eventNameString;
+      var gtmDescription = event[30].toString();
+      var gtmFiring = event[31].toString();
+      // Logger.log("Description: "+ gtmDescription);
+      var note = "Description: \n"+ gtmDescription + "\n" + " \n Related Documentation: \n"+ "\n" + "Test Criteria: "+"\n" + gtmFiring +"\n" + "Updates: "+"\n"+ updateSig;
+      
+      Logger.log("Trigger Found: "+ triggerFound)
+
+      if(eventType!== "Enhanced Measurement" && eventType!=="Automatic" && triggerFound == undefined |eventType!== "Enhanced Measurement" && eventType!=="Automatic" && !triggerFound){
+      // Logger.log("GA4 Event Type= " + event[2]+ "; for Event: " + event[0] )          
+      // Logger.log("Description= " + event[30] + "\n When To Fire: " + event[31] )          
+      
+      var trigger =  TagManager.Accounts.Containers.Workspaces.Triggers.create(
+        {
+        "name": gtmEventName,
+        "type": "customEvent",
+        "customEventFilter": [
+              {
+                "type": "equals",
+                "parameter": [
+                  {
+                    "type": "template",
+                    "key": "arg0",
+                    "value": "{{_event}}"
+                  },
+                  {
+                    "type": "template",
+                    "key": "arg1",
+                    "value": eventNameString
+                  }
+                ]
+              }
+            ],
+          "notes":note  
+      },
+      accountTriggerPath)
+
+      Logger.log("Trigger Created: Name: " + trigger.name +"/n" + "Trigger Path: "+ trigger.path)
+      }
+    else{
+     var findText = event[0];
+     var SHTvalues = internaluserEventsSheet.createTextFinder(findText).matchEntireCell(true).findAll();
+ 
+     var result = SHTvalues.map(r => ({row: r.getRow(), col: r.getColumn()}));
+      console.log("Trigger already exists: "+ findText)
+      console.log(result)
+    }
+    })
+
+
+  // Logger.log(triggers.length);
+  // Logger.log(triggerRange.getValue());
+  // var trigs= triggerIdArray.map((item,index,array) => array[index] = [item]);
+  // tagIdRange.setValues(trigs)
+}
+
+
+
+function customVariableCreation() {
+  var variablesNotNeeded =[];
+  var variablesCreated = [];
+
+  // var fields = "variable(name,variableId";
+  var variableGTM = listVariables(accountTriggerPath)
+  Logger.log(variableGTM)
+
+
+  variableList.getValues().forEach(function(variable){
+      
+      function isVariable(variableName){
+         return variableName.name.includes(variable[0])
+      }
+
+      var variableFound = '';
+      if(variableGTM){
+        Logger.log("Variables found")
+        variableFound = variableGTM.find(isVariable);
+      }
+
+     var variableString = variable[0].toString();
+
+     var varName = "DLV - " + variableString;  
+
+     var varValue = "event_vars." + variableString;  
+
+     var varDes = variable[2].toString();
+     var note = "Description: \n"+ varDes + "\n" + "\n Related Documentation: \n + "\n" + "" + "\n" + "Updates: "+"\n"+ updateSig;;
+  
+     if(variable[4]!== "Enhanced Measurement" && variable[4]!=="Automatic" && variableFound == undefined | variable[4]!== "Enhanced Measurement" && variable[4]!=="Automatic" && !variableFound){
+      Logger.log("GA4 Event Type= " + variable[4]+ "; for Event: " + variable[0] )          
+      Logger.log("Description= " + variable[2] ) 
+
+     var variableCreation = TagManager.Accounts.Containers.Workspaces.Variables.create(
+               {'name': varName, 
+               'type': 'v',
+                      "parameter": [
+                          {
+                           "type": "template",
+                           "key": "name",
+                           "value": varValue
+                          },
+                          {
+                           "type": "template",
+                           "key": "defaultValue",
+                           "value": "DEFAULT"
+                          },
+                          {
+                           "type": "integer",
+                           "key": "dataLayerVersion",
+                           "value": "2"
+                          }
+                         ],
+                 'notes':note               
+               },
+               accountTriggerPath
+               );
+     Logger.log(variableCreation.variableId);
+  
+     Utilities.sleep(5000)
+    variablesCreated.push(variable[0])
+     }else{
+       
+        variablesNotNeeded.push(variable[0]);
+         Logger.log("Variable already exists or is a Enhanced Measurement or Automatic variable: "+ variable[0] )
+     }
+  })
+  Logger.log("Variables Created: " + variablesCreated.length)
+  Logger.log("variables Not Created: "+ variablesNotNeeded.length) 
+  // Utilities.sleep(3000)
+  Logger.log(!listVariables(accountTriggerPath) ? "No Variables Created"  : listVariables(accountTriggerPath).length )
+}
+
+function eventCreation(){
+  
+    var tagList = listTags(accountTriggerPath);
+    Logger.log(tagList)
+    Utilities.sleep(3000)
+
+    var triggerList = listTriggers(accountTriggerPath);
+    Logger.log(triggerList)
+    Utilities.sleep(3000)
+
+    var variableList = listVariables(accountTriggerPath)
+    Logger.log(variableList)
+    Utilities.sleep(3000)
+
+    eventNames.getValues().forEach(function(event){
+        var eventNameTrimmed = event[0].trim();
+        Logger.log("Event Name Trimmed: "+ eventNameTrimmed)
+          //  Utilities.sleep(5000)
+        function isTrigger(triggerName){
+            return triggerName.name.includes(eventNameTrimmed)
+        }
+        function isTag(tagName){
+            return tagName.name.includes(eventNameTrimmed)
+        }
+      
+        // 11-25
+        var event_vars = [event[11],event[12],event[13],event[14],event[15],event[16],event[17],event[18],event[19],event[20],event[21],event[22],event[23],event[24],event[25]]
+        var event_varsFiltered = event_vars.filter(function(el){
+          return !!el;
+        })
+
+
+        function varFormatting(){
+          
+        var evformatted = [];
+     
+          event_varsFiltered.forEach(function(event_var){
+          Logger.log("VarName: "+ event_var);
+          function isVariable(varName){
+            return varName.name.includes(event_var)
+             }
+          var varFound = !variableList ? undefined : variableList.find(isVariable);
+          var event_var_paraValue = !varFound ? event_var : "{{"+ varFound.name+"}}"; 
+          Logger.log("Var Found: "+ event_var_paraValue)
+          
+          
+          var varTemplate = 
+              {
+                "type": "map",
+                "map": [
+                  {
+                    "type": "template",
+                    "key": "parameter",
+                    "value": event_var
+                  },
+                  {
+                    "type": "template",
+                    "key": "parameterValue",
+                    "value": event_var_paraValue
+                  }
+                ]
+              }
+          evformatted.push(varTemplate)
+          });
+
+          return evformatted
+
+        }
+
+
+
+
+        Logger.log(event_varsFiltered); 
+        var eventType = event[2].toString();
+        
+        var tagFound = !tagList ? undefined : tagList.find(isTag)
+        var triggerFound =  !triggerList ? undefined : triggerList.find(isTrigger);
+
+        if(event != "" && eventType != "Enhanced Measurement" && eventType != "Automatic" && triggerFound != undefined){
+           Logger.log(event[0])
+
+            Logger.log("Trigger Found: "+ triggerFound.triggerId)
+            var gtmDescription = event[29].toString();
+            // Logger.log(gtmDescription);
+            // Logger.log("GA4 Event Type= " + event[2]+ "; for Event: " + event[0] )
+            
+            var gtmEventName ="GA4 Event - "+ event[0] + " - Tag";  
+            var gtmDescription = event[30].toString();
+            var gtmFiring = event[31].toString();
+            var note = "Description: \n"+ gtmDescription +  "\n" + " \n Related Documentation: \n "+ "\n" + "\n" +"Test Criteria: "+"\n" + gtmFiring +"\n" + "Updates: "+"\n"+ updateSig;
+            Logger.log("Tag to be created: " + gtmEventName)
+            Logger.log("Notes: " + note)
+
+            var varListArray = varFormatting();
+
+            Logger.log(varListArray); 
+            var eventTagCreation = TagManager.Accounts.Containers.Workspaces.Tags.create(
+                {
+                    'name': gtmEventName,
+                    'type': 'gaawe',
+                    'liveOnly': false,
+                    'parameter': [
+                       {
+                         "type": "boolean",
+                         "key": "sendEcommerceData",
+                         "value": "false"
+                       },
+                       {
+                         "type": "boolean",
+                         "key": "enhancedUserId",
+                         "value": "false"
+                       },
+                       {
+                         "type": "template",
+                         "key": "eventName",
+                         "value": event[0]
+                       },
+                       {
+                         "type": "template",
+                         "key": "measurementIdOverride",
+                         "value": "{{GA4 Measurement ID Variable}}"
+                       },
+                       {
+                         "type": "template",
+                         "key": "eventSettingsVariable",
+                         "value": "{{GA4 - Event Settings}}"
+                       },
+                       {
+                         "type": "list",
+                         "key": "eventSettingsTable",
+                         "list": [
+                              varListArray
+                         ]
+                       }
+
+                    ],
+                    'firingTriggerId': [triggerFound.triggerId],
+                    'notes':note 
+                  },
+                  accountTriggerPath
+            );
+               Logger.log(eventTagCreation.tagId);
+       
+         }else{
+          Logger.log("Event Name: " + event[0])
+          Logger.log("Tag already exists or Event is EM or Automatic: " + tagFound)
+         }
+
+  })
+
+
+
+}
+
+
+
+
+
+// function auditWorkspaceTagsVars(){
+//   var tagPath = "accounts/--------------/containers/--------------/workspaces/4";
+
+//   var tagsList = TagManager.Accounts.Containers.Workspaces.Tags.list(
+//     tagPath
+//   ).tag
+//   var variablesList= TagManager.Accounts.Containers.Workspaces.Variables.list(
+//     tagPath
+//   ).variable
+
+
+//   var variableIDs=[];
+//   variables3Test.getValues().forEach(function(vars){
+//     Logger.log("Variable Name: " +vars[0]);
+//   if(vars[0]!=""){
+//     function isVariable(varsGTM){
+//       return varsGTM.name.includes(vars[0]);
+//     }
+//     var varFound = variablesList.find(isVariable);
+//     if (varFound!= undefined){
+//         Logger.log("Variable Found: "+ varFound.name)
+//       variableIDs.push([varFound.variableId])
+//     }else{
+//         Logger.log("Variable Not Found: " +vars[0])
+//         var newVar = varCreation(vars[0],vars[2],tagPath)
+//         if(newVar.variableId != undefined){
+//           Logger.log("NewVar ID Pushed : "+ vars[0] )
+//         variableIDs.push([newVar.variableId])
+//         }else{
+//           Logger.log("NewVar could not be created for: "+ vars[0] )
+//         }
+//     }
+//   }
+//   })
+//   variables3IdRange.setValues(variableIDs)
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
