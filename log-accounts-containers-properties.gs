@@ -49,8 +49,8 @@ function listContainers(accountId) {
 function findMeasurementId(containerPath){
     var workspacePaths = [];
   var workspaceList = TagManager.Accounts.Containers.Workspaces.list(
-    	// 'accounts/6210782304/containers/173946663',
-      // 'accounts/6210786712/containers/173954260',
+    	// 'accounts/--------/containers/--------',
+      // 'accounts/--------/containers/--------',
       containerPath,
       {fields: 'workspace(path,workspaceId,name)'}
     ).workspace
@@ -177,9 +177,9 @@ function listPropertyStream(stream){
   // Logger.log(stream)
       var streamList = AnalyticsAdmin.Properties.DataStreams.list(
       //  webstream created in property below
-      //  'properties/343538643'
+      //  'properties/--------'
       // webstream does not exist for the property below
-      //  'properties/421012189',
+      //  'properties/--------',
       stream,
        {'fields' : 'dataStreams(webStreamData.measurementId)'}
      ).dataStreams;
