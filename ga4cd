@@ -1,0 +1,101 @@
+// Script to copy Google Analytics custom dimensions between multiple GA4 properties.
+// Based on: https://stackoverflow.com/questions/73642372/copy-google-analytics-custom-definitions-dimensions-between-ga4-properties-with
+// Required Services: Sheets, AnalyticsAdmin, AnalyticsData
+
+function goCopyCustomDimensions() {
+  // Add Analytics Provisioning spreadsheet ID and range.
+  const spreadsheetId = "";
+  const rangeName = "Sheet1!J2:J";
+  let idArray = [];
+  try {
+    // Get ID values from the sheet.
+    const values = Sheets.Spreadsheets.Values.get(
+      spreadsheetId,
+      rangeName
+    ).values;
+    if (!values) {
+      console.log("No data found.");
+      return;
+    }
+    for (const row in values) {
+      idArray.push(values[row][0]);
+    }
+  } catch (err) {
+    // TODO (developer) - Handle Values.get() exception from Sheet API
+    console.log(err.message);
+  }
+
+  // Site Template property: https://analytics.google.com/analytics/web/#/p419525079/reports/intelligenthome
+  gaSourcePropertyId = "419525079";
+  // Property IDs to copy to
+  gaDestinationPropertyIds = idArray;
+
+  copyCustomDimensions(gaSourcePropertyId, gaDestinationPropertyIds);
+}
+
+function copyCustomDimensions(gaSourcePropertyId, gaDestinationPropertyIds) {
+  let sourceDimensions = getCustomDimensions(gaSourcePropertyId);
+  addCustomDimensions(gaDestinationPropertyIds, sourceDimensions);
+}
+
+function getCustomDimensions(gaPropertyId) {
+  try {
+    return AnalyticsAdmin.Properties.CustomDimensions.list(
+      `properties/${gaPropertyId}`
+    )["customDimensions"];
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function addCustomDimensions(gaPropertyIds, dimensions) {
+  // Loop array of IDs to add custom dimensions to each.
+  for (i in gaPropertyIds) {
+    let destinationCustomDimensions = getCustomDimensions(gaPropertyIds[i]);
+
+    // The destination may not have any custom dimensions.
+    if (typeof destinationCustomDimensions == "undefined") {
+      console.info(
+        `Could not get custom definitions for property ID '${gaPropertyIds[i]}'.`,
+        destinationCustomDimensions
+      );
+      destinationCustomDimensions = [];
+    }
+
+    const destinationDimensionParameterNames = destinationCustomDimensions.map(
+      (dimension) => dimension["parameterName"]
+    );
+
+    dimensions.forEach((sourceDimension) => {
+      // Check if the new dimension already exists in the destination.
+      if (
+        !destinationDimensionParameterNames.includes(
+          sourceDimension["parameterName"]
+        )
+      ) {
+        let destinationDimension = {
+          parameterName: sourceDimension["parameterName"],
+          displayName: sourceDimension["displayName"],
+          description: sourceDimension["description"],
+          scope: sourceDimension["scope"],
+        };
+        let result = null;
+        try {
+          result = AnalyticsAdmin.Properties.CustomDimensions.create(
+            destinationDimension,
+            `properties/${gaPropertyIds[i]}`
+          );
+          console.log("[COPIED]", result);
+        } catch (error) {
+          console.log("[FAILED]", destinationDimension);
+          console.error(error);
+        }
+      } else {
+        console.info(
+          `[NO ACTION] Dimension with apiName '${sourceDimension["parameterName"]}' already present in destination! Dimension not added to destination.`,
+          sourceDimension
+        );
+      }
+    });
+  }
+}
