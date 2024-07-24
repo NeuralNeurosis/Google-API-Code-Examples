@@ -1,0 +1,271 @@
+// Script to automate HWP Google Analytics 4 Required Setup Steps
+// Requires Services: Sheets, AnalyticsAdmin, AnalyticsData
+
+function goRunScripts() {
+  // Specify Analytics Provisioning spreadsheet:
+  const spreadsheetId = "1fxUrtDD35OLqDIbfy8sOzxDVXQ8bHEjHFW-r6KmA8_E";
+  // Specify Analytics Provisioning spreadsheet Property ID column/cell range:
+  const rangeName = "Required Fields For Automation!J2:J";
+  let idArray = [];
+  try {
+    // Get ID values from the sheet.
+    const values = Sheets.Spreadsheets.Values.get(
+      spreadsheetId,
+      rangeName
+    ).values;
+    if (!values) {
+      console.log("No data found.");
+      return;
+    }
+    for (const row in values) {
+      idArray.push(values[row][0]);
+    }
+  } catch (err) {
+    // TODO (developer) - Handle Values.get() exception from Sheet API
+    console.log(err.message);
+  }
+
+  // The Site Template property: https://analytics.google.com/analytics/web/#/p419525079/reports/intelligenthome
+  const gaSourcePropertyId = "419525079";
+
+  // The Property IDs to set
+  const gaDestinationPropertyIds = idArray;
+  //console.log(gaDestinationPropertyIds);
+
+  // Test Property IDs
+  //const testPropertyIDs = ['444990902','445070721','445738093','445755666','449288326'];
+
+  //The scripts to run functions for each step (remove the double slash before function name to enable and Run):
+
+  //FUNCTION: Set Property Details
+  //setPropertyDetails(gaDestinationPropertyIds);
+
+  //FUNCTION: Set Enhanced Measurement
+  //setEnhancedMeasurement(gaDestinationPropertyIds);
+
+  //FUNCTION: Set Acknowledge User Data Collection
+  //setAcknowledgeUserDataCollection(gaDestinationPropertyIds);
+
+  //FUNCTION: Set Data Retention
+  //setDataRetention(gaDestinationPropertyIds);
+
+  //FUNCTION: Copy Custom Dimensions
+  //copyCustomDimensions(gaSourcePropertyId, gaDestinationPropertyIds);
+}
+
+
+function getPropertyDetails(gaPropertyId) {
+  try {
+    return AnalyticsAdmin.Properties.get(
+      `properties/${gaPropertyId}`
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function setPropertyDetails(gaPropertyIds) {
+  // Loop array of IDs to set property details for each.
+  for (i in gaPropertyIds) {
+    let details = getPropertyDetails(gaPropertyIds[i]);
+    // Check if the specified property details are already set.
+    if (details.industryCategory !== "JOBS_AND_EDUCATION" || details.currencyCode !== "USD" || details.timeZone !== "America/New_York") {
+        let result = null;
+        try {
+          result = AnalyticsAdmin.Properties.patch({
+            "industryCategory": "JOBS_AND_EDUCATION",
+            "currencyCode": "USD",
+            "timeZone": "America/New_York"
+        }, `properties/${gaPropertyIds[i]}`, {"updateMask": "industry_category,currency_code,time_zone"}) ;
+          console.log("[PROPERTY DETAILS SET]", result);
+        } catch (error) {
+          console.log("[FAILED]");
+          console.error(error);
+        }
+    } else {
+        console.info(
+          '[NO ACTION] Property Details are already set.',
+          details
+        );
+      }
+  }
+}
+
+function getEnhancedMeasurement(dsName) {
+  try {
+    let response = UrlFetchApp.fetch(`https://analyticsadmin.googleapis.com/v1alpha/${dsName}/enhancedMeasurementSettings`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` },
+    });
+    return JSON.parse(response.getContentText());
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function setEnhancedMeasurement(gaPropertyIds) {
+
+  // Loop array of IDs to adjust enhanced measurement settings for each.
+  for (i in gaPropertyIds) {
+    let dsName = AnalyticsAdmin.Properties.DataStreams.list(`properties/${gaPropertyIds[i]}`)["dataStreams"][0].name;
+    let settings = getEnhancedMeasurement(dsName);
+
+    // Check if the specified enhanced measurement settings are already set.
+    if ('pageChangesEnabled' in settings || 'formInteractionsEnabled' in settings) {
+
+      let result = null;
+      try {
+        let payload = {
+            "name": `${dsName}/enhancedMeasurementSettings`,
+            "updateMask": {
+                pathsList: ["pageChangesEnabled,formInteractionsEnabled"]
+            },
+            "pageChangesEnabled": false,
+            "formInteractionsEnabled": false,
+          };
+
+        let options =
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${ScriptApp.getOAuthToken()}`,
+              'Content-Type': 'application/json',
+            payload: JSON.stringify(payload),
+            muteHttpExceptions: true
+            }
+          };
+
+          result = UrlFetchApp.fetch(`https://analyticsadmin.googleapis.com/v1alpha/${dsName}/enhancedMeasurementSettings?updateMask=pageChangesEnabled%2CformInteractionsEnabled`,options);
+
+          console.log("[ENHANCED MEASUREMENT SET]", result.getContentText());
+      } catch (error) {
+        console.log("[FAILED]");
+        console.error(error);
+      }
+    } else {
+        console.info(
+          '[NO ACTION] Enhanced Measurement is already set.',
+          settings
+        );
+      }
+  }
+}
+
+
+function setAcknowledgeUserDataCollection(gaPropertyIds) {
+  // Loop array of IDs to set Acknowledgement for each.
+  for (i in gaPropertyIds) {
+    try {
+      result = AnalyticsAdmin.Properties.acknowledgeUserDataCollection( {"acknowledgement": "I acknowledge that I have the necessary privacy disclosures and rights from my end users for the collection and processing of their data, including the association of such data with the visitation information Google Analytics collects from my site and/or app property."},`properties/${gaPropertyIds[i]}`);
+      console.log(`[ACKNOWLEDGEMENT SET] for property ${gaPropertyIds[i]}`, result);
+    } catch (error) {
+      console.log("[FAILED]");
+      console.error(error);
+    }
+  }
+}
+
+
+function getDataRetention(gaPropertyId) {
+  try {
+    return AnalyticsAdmin.Properties.getDataRetentionSettings(`properties/${gaPropertyId}/dataRetentionSettings`);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function setDataRetention(gaPropertyIds) {
+   // Loop array of IDs to adjust data retention settings for each.
+  for (i in gaPropertyIds) {
+    let settings = AnalyticsAdmin.Properties.getDataRetentionSettings(`properties/${gaPropertyIds[i]}/dataRetentionSettings`);
+    // Check if the specified data retention settings are already set.
+    if (settings.eventDataRetention !== "FOURTEEN_MONTHS" || settings.resetUserDataOnNewActivity !== true) {
+        let result = null;
+        try {
+          result = AnalyticsAdmin.Properties.updateDataRetentionSettings(
+     {
+        "eventDataRetention": "FOURTEEN_MONTHS",
+        "resetUserDataOnNewActivity": true
+      }, `properties/${gaPropertyIds[i]}/dataRetentionSettings`, {"updateMask": "eventDataRetention,resetUserDataOnNewActivity"});
+          console.log("[DATA RETENTION SET]", result);
+        } catch (error) {
+          console.log("[FAILED]");
+          console.error(error);
+        }
+    } else {
+        console.info(
+          '[NO ACTION] Data Retention is already set.',
+          settings
+        );
+      }
+  }
+}
+
+
+function copyCustomDimensions(gaSourcePropertyId, gaDestinationPropertyIds) {
+  let sourceDimensions = getCustomDimensions(gaSourcePropertyId);
+  addCustomDimensions(gaDestinationPropertyIds, sourceDimensions);
+}
+
+function getCustomDimensions(gaPropertyId) {
+  try {
+    return AnalyticsAdmin.Properties.CustomDimensions.list(
+      `properties/${gaPropertyId}`
+    )["customDimensions"];
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function addCustomDimensions(gaPropertyIds, dimensions) {
+  // Loop array of IDs to add custom dimensions to each.
+  for (i in gaPropertyIds) {
+    let destinationCustomDimensions = getCustomDimensions(gaPropertyIds[i]);
+
+    // The destination may not have any custom dimensions.
+    if (typeof destinationCustomDimensions == "undefined") {
+      console.info(
+        `Could not get custom definitions for property ID '${gaPropertyIds[i]}'.`,
+        destinationCustomDimensions
+      );
+      destinationCustomDimensions = [];
+    }
+
+    const destinationDimensionParameterNames = destinationCustomDimensions.map(
+      (dimension) => dimension["parameterName"]
+    );
+
+    dimensions.forEach((sourceDimension) => {
+      // Check if the new dimension already exists in the destination.
+      if (
+        !destinationDimensionParameterNames.includes(
+          sourceDimension["parameterName"]
+        )
+      ) {
+        let destinationDimension = {
+          parameterName: sourceDimension["parameterName"],
+          displayName: sourceDimension["displayName"],
+          description: sourceDimension["description"],
+          scope: sourceDimension["scope"],
+        };
+        let result = null;
+        try {
+          result = AnalyticsAdmin.Properties.CustomDimensions.create(
+            destinationDimension,
+            `properties/${gaPropertyIds[i]}`
+          );
+          console.log("[CUSTOM DIMENSIONS COPIED]", result);
+        } catch (error) {
+          console.log("[FAILED]", destinationDimension);
+          console.error(error);
+        }
+      } else {
+        console.info(
+          `[NO ACTION] Dimension with apiName '${sourceDimension["parameterName"]}' already present in destination! Dimension not added to destination.`,
+          sourceDimension
+        );
+      }
+    });
+  }
+}
